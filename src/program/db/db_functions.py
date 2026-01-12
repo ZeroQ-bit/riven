@@ -122,7 +122,17 @@ def get_item_by_external_id(
             .where(or_(*conditions))
         )
 
-        item = _s.execute(query).unique().scalar_one_or_none()
+        # Handle case where multiple rows exist for the same external ID
+        # (can happen with duplicate entries in database)
+        try:
+            item = _s.execute(query).unique().scalar_one_or_none()
+        except Exception as e:
+            # If we get MultipleResultsFound, just get the first match
+            if "MultipleResultsFound" in str(type(e).__name__):
+                results = _s.execute(query).unique().all()
+                item = results[0][0] if results else None
+            else:
+                raise
 
         if item:
             _s.expunge(item)
