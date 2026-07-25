@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "detail": "",
+  "data": {
+    "id": 12345,
+    "username": "zeroq",
+    "email": "zeroq@example.com",
+    "plan": 1,
+    "premium_expires_at": 1893456000
+  }
+}
