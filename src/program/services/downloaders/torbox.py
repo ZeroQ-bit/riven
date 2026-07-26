@@ -57,8 +57,21 @@ class TorBoxFile(BaseModel):
         return self.size or self.bytes_size
 
 
+class TorBoxCreateTorrentResponse(BaseModel):
+    """Creation receipt from /torrents/createtorrent.
+
+    This is NOT a full torrent object - it only carries the new torrent's id
+    (as ``torrent_id``) and the infohash. ``name`` and other fields are absent
+    and must be fetched via /torrents/mylist if needed.
+    """
+
+    torrent_id: int | None = None
+    queued_id: int | None = None
+    hash: str | None = None
+
+
 class TorBoxTorrent(BaseModel):
-    """A single torrent object from /torrents/mylist or /torrents/createtorrent."""
+    """A full torrent object from /torrents/mylist."""
 
     id: int
     name: str
@@ -465,15 +478,19 @@ class TorBoxDownloader(DownloaderBase):
         if not envelope.success or envelope.data is None:
             raise TorBoxError(envelope.detail or "createtorrent failed")
 
+        # createtorrent returns a creation receipt, not a full torrent object.
         try:
-            torrent = TorBoxTorrent.model_validate(envelope.data)
+            created = TorBoxCreateTorrentResponse.model_validate(envelope.data)
         except Exception as e:
-            raise TorBoxError(f"createtorrent returned no usable torrent: {e}")
+            raise TorBoxError(f"createtorrent returned no usable receipt: {e}")
 
-        if not torrent.id:
-            raise TorBoxError("No torrent ID returned by TorBox.")
+        torrent_id = created.torrent_id or created.queued_id
+        if not torrent_id:
+            raise TorBoxError(
+                f"No torrent ID in createtorrent response: {envelope.detail}"
+            )
 
-        return torrent.id
+        return torrent_id
 
     def _find_torrent_by_hash(self, infohash: str) -> int | None:
         """

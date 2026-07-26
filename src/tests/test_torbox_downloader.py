@@ -17,6 +17,7 @@ import pytest
 
 from program.services.downloaders.torbox import (
     TORBOX_READY_STATES,
+    TorBoxCreateTorrentResponse,
     TorBoxDownloader,
     TorBoxEnvelope,
     TorBoxError,
@@ -115,6 +116,36 @@ class TestTorBoxModels:
         dl = TorBoxRequestDownload.model_validate(env.data)
         assert dl.url.startswith("https://")
         assert dl.filesize == 4000000000
+
+    def test_create_torrent_receipt_parses(self):
+        """Regression: createtorrent returns a receipt with torrent_id (not id),
+        no name field. Parsing must not raise.
+        """
+        env = TorBoxEnvelope.model_validate(load_fixture("torbox_createtorrent.json"))
+        created = TorBoxCreateTorrentResponse.model_validate(env.data)
+        assert created.torrent_id == 998877
+        assert created.hash == UBUNTU_HASH
+
+    def test_create_torrent_real_shape_parses(self):
+        """The real createtorrent response uses snake_case keys and an auth_id
+        UUID field; ensure none of that breaks parsing.
+        """
+        env = TorBoxEnvelope.model_validate(
+            {
+                "success": True,
+                "detail": "ok",
+                "data": {
+                    "torrent_id": 555,
+                    "hash": "abc123",
+                    "queued_id": None,
+                    "auth_id": "d3b046a1-8fe2-6c8eca7abefb",
+                    "active_limit": 10,
+                    "current_active_downloads": 0,
+                },
+            }
+        )
+        created = TorBoxCreateTorrentResponse.model_validate(env.data)
+        assert created.torrent_id == 555
 
 
 # --- Static helpers ------------------------------------------------------------
