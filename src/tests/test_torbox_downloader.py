@@ -26,6 +26,7 @@ from program.services.downloaders.torbox import (
     TorBoxUser,
 )
 from program.utils.request import CircuitBreakerOpen
+from routers.secure.default import DownloaderUserInfo
 
 TEST_DATA = Path(__file__).parent / "test_data"
 UBUNTU_HASH = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
@@ -408,3 +409,30 @@ class TestUnrestrictLink:
         dl = make_downloader(session)
 
         assert dl.unrestrict_link("998877:1") is None
+
+
+class TestRouterSerialization:
+    """Regression: /downloader_user_info builds DownloaderUserInfo(service=...).
+
+    The router model has its own service Literal that must include "torbox" or
+    the dashboard returns 500 the moment TorBox is initialized. See the
+    companion fix in src/routers/secure/default.py.
+    """
+
+    def test_downloader_user_info_accepts_torbox(self):
+        # Must not raise ValidationError.
+        info = DownloaderUserInfo(
+            service="torbox",
+            username="zeroq",
+            user_id=12345,
+            premium_status="premium",
+        )
+        assert info.service == "torbox"
+
+    def test_downloader_user_info_accepts_other_services(self):
+        # Ensure the fix didn't drop the existing services.
+        for svc in ("realdebrid", "alldebrid", "debridlink"):
+            info = DownloaderUserInfo(
+                service=svc, user_id=1, premium_status="premium"
+            )
+            assert info.service == svc
