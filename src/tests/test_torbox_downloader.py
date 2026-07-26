@@ -410,6 +410,47 @@ class TestGetTorrentInfo:
         with pytest.raises(TorBoxError):
             dl.get_torrent_info(999)
 
+    def test_real_mylist_shape_parses(self):
+        """Regression: the real /torrents/mylist response returns created_at as
+        an ISO 8601 string (e.g. '2026-07-26T02:33:36Z'), not a unix timestamp.
+        Previously this raised an int_parsing ValidationError, every get_torrent_info
+        call failed, and all streams got blacklisted.
+        """
+        session = MagicMock()
+        session.get.return_value = make_response(
+            {
+                "success": True,
+                "detail": "",
+                "data": {
+                    "id": 1234,
+                    "name": "Some.Movie.2026.1080p",
+                    "hash": "abc123",
+                    "size": 2000000000,
+                    "download_state": "cached",
+                    "download_finished": True,
+                    "created_at": "2026-07-26T02:33:36Z",
+                    "expires_at": "2026-08-26T02:33:36Z",
+                    "progress": 100,
+                    "auth_id": "d3b046a1-8fe2-6c8eca7abefb",
+                    "server": 1,
+                    "peers": 0,
+                    "seeds": 0,
+                    "active": True,
+                    "files": [
+                        {"id": 1, "name": "Some.Movie.2026.1080p.mkv", "size": 2000000000}
+                    ],
+                },
+            }
+        )
+        dl = make_downloader(session)
+
+        info = dl.get_torrent_info(1234)
+
+        assert info.id == 1234
+        assert info.status == "cached"
+        assert info.created_at is not None
+        assert info.progress == 100
+
 
 class TestDeleteTorrent:
     def test_success(self):

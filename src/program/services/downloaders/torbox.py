@@ -71,7 +71,11 @@ class TorBoxCreateTorrentResponse(BaseModel):
 
 
 class TorBoxTorrent(BaseModel):
-    """A full torrent object from /torrents/mylist."""
+    """A full torrent object from /torrents/mylist.
+
+    Field types per the TorBox JS SDK (get-torrent-list-ok-response-data).
+    Note: created_at and expires_at are ISO 8601 strings, NOT unix timestamps.
+    """
 
     id: int
     name: str
@@ -82,7 +86,9 @@ class TorBoxTorrent(BaseModel):
     download_state: str = "queued"
     download_finished: bool = False
     cached: bool = False
-    created_at: int | None = None  # unix timestamp
+    created_at: str | None = None  # ISO 8601 string, e.g. "2026-07-26T02:33:36Z"
+    expires_at: str | None = None  # ISO 8601 string
+    progress: float | None = None
     files: list[TorBoxFile] | None = None
 
 
@@ -588,8 +594,10 @@ class TorBoxDownloader(DownloaderBase):
         created_at = None
         if torrent.created_at:
             try:
-                created_at = datetime.fromtimestamp(torrent.created_at)
-            except (ValueError, OSError) as e:
+                created_at = datetime.fromisoformat(
+                    torrent.created_at.replace("Z", "+00:00")
+                )
+            except ValueError as e:
                 logger.debug(f"Failed to parse TorBox created_at: {e}")
 
         return TorrentInfo(
@@ -599,6 +607,7 @@ class TorBoxDownloader(DownloaderBase):
             infohash=torrent.hash or torrent.info_hash,
             bytes=torrent.size or torrent.bytes,
             created_at=created_at,
+            progress=torrent.progress,
             files=files,
             links=links,
         )
