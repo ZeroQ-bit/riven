@@ -389,6 +389,30 @@ class TestGetTorrentInfo:
         assert info.files[1].filename == "ubuntu-24.04.iso"
         assert info.files[1].bytes == 4000000000
 
+    def test_download_url_populated_via_requestdl(self):
+        """Regression: get_torrent_info must populate download_url for each file
+        by calling /torrents/requestdl. Without this, _update_attributes skips
+        MediaEntry creation and items never advance past Unknown state.
+        """
+        session = MagicMock()
+
+        def fake_get(url, **kwargs):
+            if "mylist" in url:
+                return make_response(load_fixture("torbox_mylist_ready.json"))
+            if "requestdl" in url:
+                return make_response(load_fixture("torbox_requestdl.json"))
+            return make_response({}, status_code=404)
+
+        session.get.side_effect = fake_get
+        dl = make_downloader(session)
+
+        info = dl.get_torrent_info(998877)
+
+        # The single file (id=1) must now have a non-empty download_url
+        assert info.files[1].download_url, "download_url must be populated"
+        assert info.files[1].download_url.startswith("https://")
+        assert len(info.links) >= 1
+
     def test_list_payload_unwrapped(self):
         session = MagicMock()
         # Some mylist responses wrap the single item in a list
