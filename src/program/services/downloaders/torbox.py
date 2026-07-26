@@ -582,54 +582,26 @@ class TorBoxDownloader(DownloaderBase):
         files = dict[int, TorrentFile]()
         links = list[str]()
 
+        # Populate each file's download_url with a synthetic "torbox:<tid>:<fid>"
+        # link. Riven's _update_attributes only creates a MediaEntry (which
+        # advances the item past Unknown state) when download_url is non-empty.
+        #
+        # We do NOT eagerly call /torrents/requestdl here because doing so for
+        # every file of every scanned torrent trips the TorBox 300 req/min rate
+        # limit (verified in production: circuit breaker opens within minutes).
+        # Instead, the real CDN URL is resolved lazily by unrestrict_link() when
+        # the VFS actually reads the file - matching how RealDebrid defers
+        # unrestricting to access time.
         for file in torrent.files or []:
+            synthetic_url = f"torbox:{torrent.id}:{file.id}"
             files[file.id] = TorrentFile(
                 id=file.id,
                 path=file.name,
                 bytes=file.get_size(),
                 selected=1,  # all files available on TorBox
-                download_url="",  # populated below via requestdl
+                download_url=synthetic_url,
             )
-
-        # Eagerly resolve each file's CDN download URL via /torrents/requestdl.
-        # Riven's _update_attributes only creates a MediaEntry (and thus advances
-        # the item to Downloaded state) when debrid_file.download_url is set, so
-        # we must populate it here - mirroring how RealDebrid correlates torrent
-        # links to files. The token query param is required by the TorBox API.
-        for file_id, tf in files.items():
-            try:
-                dl_response = self.api.session.get(
-                    "torrents/requestdl",
-                    params={
-                        "token": self.api.api_key,
-                        "torrent_id": torrent.id,
-                        "file_id": file_id,
-                        "redirect": "false",
-                    },
-                    timeout=15,
-                )
-
-                if not dl_response.ok:
-                    logger.debug(
-                        f"TorBox requestdl failed for file {file_id} of torrent {torrent.id}: "
-                        f"{self._handle_error(dl_response)}"
-                    )
-                    continue
-
-                envelope = TorBoxEnvelope.model_validate(dl_response.json())
-
-                if not envelope.success or not envelope.data:
-                    continue
-
-                dl = TorBoxRequestDownload.model_validate(envelope.data)
-
-                if dl.url:
-                    tf.download_url = dl.url
-                    links.append(dl.url)
-            except Exception as e:
-                logger.debug(
-                    f"TorBox requestdl error for file {file_id} of torrent {torrent.id}: {e}"
-                )
+            links.append(synthetic_url)
 
         created_at = None
         if torrent.created_at:
@@ -739,9 +711,16 @@ class TorBoxDownloader(DownloaderBase):
         """
         Parse a TorBox link into (torrent_id, file_id).
 
-        Accepts either "torrent_id:file_id" or a full requestdl URL with those
-        query params.
+        Accepts:
+        - Synthetic format: "torbox:<torrent_id>:<file_id>" (used internally to
+          defer CDN URL resolution until the VFS reads the file)
+        - Compact format: "<torrent_id>:<file_id>"
+        - A full requestdl URL with torrent_id/file_id query params
         """
+        # Strip the synthetic "torbox:" prefix used by get_torrent_info.
+        if link.startswith("torbox:"):
+            link = link[len("torbox:") :]
+
         if ":" in link and "/" not in link:
             tid_str, fid_str = link.split(":", 1)
             return int(tid_str), int(fid_str)
