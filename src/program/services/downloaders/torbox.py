@@ -37,10 +37,10 @@ class TorBoxEnvelope(BaseModel):
 
 class TorBoxUser(BaseModel):
     id: int
-    username: str | None = None
+    # TorBox has no username; email is the account identifier.
     email: str | None = None
-    plan: int = 0  # 0 = free, >0 = premium
-    premium_expires_at: int | None = None  # unix timestamp (seconds)
+    plan: int = 0  # 0 = Free, 1 = Essential, 2 = Pro, 3 = Standard
+    premium_expires_at: str | None = None  # ISO 8601 date string
 
 
 class TorBoxFile(BaseModel):
@@ -723,15 +723,20 @@ class TorBoxDownloader(DownloaderBase):
 
             if user.premium_expires_at:
                 try:
-                    expiration = datetime.fromtimestamp(user.premium_expires_at)
+                    # TorBox returns an ISO 8601 string, e.g. "2025-12-01T00:00:00".
+                    expiration = datetime.fromisoformat(
+                        user.premium_expires_at.replace("Z", "+00:00")
+                    )
                     time_left = expiration - datetime.now(expiration.tzinfo)
                     premium_days = time_left.days
-                except (ValueError, OSError) as e:
+                except ValueError as e:
                     logger.debug(f"Failed to parse TorBox expiration: {e}")
 
             return UserInfo(
                 service="torbox",
-                username=user.username,
+                # TorBox exposes no username; reuse email for the username field
+                # so the dashboard shows a meaningful identifier.
+                username=user.email,
                 email=user.email,
                 user_id=user.id,
                 premium_status="premium" if user.plan > 0 else "free",

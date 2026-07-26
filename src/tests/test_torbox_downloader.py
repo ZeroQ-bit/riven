@@ -74,8 +74,9 @@ class TestTorBoxModels:
     def test_user_parses_premium(self):
         env = TorBoxEnvelope.model_validate(load_fixture("torbox_user_me.json"))
         user = TorBoxUser.model_validate(env.data)
-        assert user.plan == 1
-        assert user.premium_expires_at == 1893456000
+        assert user.plan == 2  # Pro plan
+        assert user.premium_expires_at == "2030-12-31T23:59:59"
+        assert user.email == "zeroq@example.com"
 
     def test_user_parses_free(self):
         env = TorBoxEnvelope.model_validate(load_fixture("torbox_user_me_free.json"))
@@ -170,6 +171,9 @@ class TestGetUserInfo:
         assert info.premium_status == "premium"
         assert info.user_id == 12345
         assert info.premium_days_left is not None
+        # TorBox exposes no username; email is reused for the username field.
+        assert info.username == "zeroq@example.com"
+        assert info.email == "zeroq@example.com"
 
     def test_free_user(self):
         session = MagicMock()
@@ -191,6 +195,36 @@ class TestGetUserInfo:
         dl = make_downloader(session)
 
         assert dl.get_user_info() is None
+
+    def test_real_api_shape_parses_without_error(self):
+        """Regression: the real TorBox /user/me response uses an ISO date string
+        for premium_expires_at (not a unix timestamp) and has no username field.
+        This must not raise — previously it caused get_user_info() to return
+        None and the dashboard to 500.
+        """
+        session = MagicMock()
+        session.get.return_value = make_response(
+            {
+                "success": True,
+                "detail": "",
+                "data": {
+                    "id": 42,
+                    "email": "real@example.com",
+                    "plan": 1,
+                    "premium_expires_at": "2027-06-01T00:00:00",
+                    "user_referral": "abc",
+                },
+            }
+        )
+        dl = make_downloader(session)
+
+        info = dl.get_user_info()
+
+        assert info is not None
+        assert info.user_id == 42
+        assert info.premium_status == "premium"
+        assert info.premium_expires_at is not None
+        assert info.premium_days_left is not None
 
 
 class TestIsCached:
