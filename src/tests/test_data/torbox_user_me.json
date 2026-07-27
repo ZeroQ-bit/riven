@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "detail": "",
+  "data": {
+    "id": 12345,
+    "email": "zeroq@example.com",
+    "plan": 2,
+    "premium_expires_at": "2030-12-31T23:59:59"
+  }
+}

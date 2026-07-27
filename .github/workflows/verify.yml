@@ -30,4 +30,6 @@ jobs:
 
       - uses: jakebailey/pyright-action@v1
         with:
-          pylance-version: latest-release
+          # uv sync installs the Pyright version pinned in uv.lock. Use that
+          # exact analyzer so local checks and CI cannot drift apart.
+          version: PATH

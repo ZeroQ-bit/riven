@@ -1,46 +1,46 @@
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
+from functools import cached_property
+from http import HTTPStatus
+from typing import Any, Literal
+
+import httpx
+import pyfuse3
 import trio
 import trio_util
-import pyfuse3
-import httpx
-
-from functools import cached_property
-from contextlib import asynccontextmanager
-from loguru import logger
-from typing import Any, Literal
-from http import HTTPStatus
 from kink import di
-from collections.abc import AsyncGenerator, AsyncIterator
+from loguru import logger
 from ordered_set import OrderedSet
 
 from program.settings import settings_manager
 from program.utils import benchmark
 from program.utils.async_client import AsyncClient
+from program.utils.debrid_link_status import should_refresh_download_url
 from program.utils.proxy_client import ProxyClient
 
-from .chunker import Chunk, ChunkCacheNotifier, ChunkRange, Chunker
+from .chunker import Chunk, ChunkCacheNotifier, Chunker, ChunkRange
 from .config import Config
 from .exceptions import (
+    ByteLengthMismatchException,
     CacheDataNotFoundException,
     ChunksTooSlowException,
-    EmptyDataException,
-    FatalMediaStreamException,
-    ByteLengthMismatchException,
-    RecoverableMediaStreamException,
     DebridServiceClosedConnectionException,
     DebridServiceException,
     DebridServiceForbiddenException,
+    DebridServiceLinkUnavailable,
     DebridServiceRangeNotSatisfiableException,
-    DebridServiceUnableToConnectException,
     DebridServiceRateLimitedException,
     DebridServiceRefusedRangeRequestException,
+    DebridServiceUnableToConnectException,
+    EmptyDataException,
+    FatalMediaStreamException,
     MediaStreamKilledException,
-    DebridServiceLinkUnavailable,
+    RecoverableMediaStreamException,
 )
 from .file_metadata import FileMetadata
 from .recent_reads import Read, RecentReads
 from .session_statistics import SessionStatistics
 from .stream_connection import StreamConnection
-
 
 # Providers that require proxy connections for streaming
 PROXY_REQUIRED_PROVIDERS = {"alldebrid"}
@@ -857,8 +857,10 @@ class MediaStream:
                         continue
 
                     raise DebridServiceForbiddenException(provider=self.provider) from e
-                elif status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.GONE, HTTPStatus.SERVICE_UNAVAILABLE):
-                    # File can't be found at this URL; try refreshing the URL once
+                elif should_refresh_download_url(status_code, self.provider):
+                    # TorBox returns HTTP 400 for some expired/invalid presigned
+                    # CDN links. Regenerate those links once just like other
+                    # providers' 404/410/503 responses, but never loop.
                     if attempt == 0:
                         has_fresh_url = await self._refresh_download_url()
 

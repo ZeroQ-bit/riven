@@ -1,17 +1,17 @@
 from typing import Self
+
 import httpx
+from kink import di
 from loguru import logger
 
-from http import HTTPStatus
-from kink import di
-
-from program.settings import settings_manager
-from program.services.streaming.media_stream import PROXY_REQUIRED_PROVIDERS
+from program.db.db import db_session
+from program.media.media_entry import MediaEntry
 from program.services.streaming.exceptions import (
     DebridServiceLinkUnavailable,
 )
-from program.media.media_entry import MediaEntry
-from program.db.db import db_session
+from program.services.streaming.media_stream import PROXY_REQUIRED_PROVIDERS
+from program.settings import settings_manager
+from program.utils.debrid_link_status import should_refresh_download_url
 
 
 class RefreshedURLIdenticalException(Exception):
@@ -89,7 +89,10 @@ class DebridCDNUrl:
                 status_code = e.response.status_code
 
                 if (
-                    status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.GONE)
+                    should_refresh_download_url(
+                        status_code,
+                        self.provider,
+                    )
                     and attempt == 1
                 ):
                     # Only attempt to refresh the URL on the first failure
