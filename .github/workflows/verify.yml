@@ -28,8 +28,5 @@ jobs:
       - name: Install the project
         run: uv sync --locked --all-extras --dev
 
-      - uses: jakebailey/pyright-action@v1
-        with:
-          # uv sync installs the Pyright version pinned in uv.lock. Use that
-          # exact analyzer so local checks and CI cannot drift apart.
-          version: PATH
+      - name: Run locked Pyright
+        run: uv run --no-sync pyright
