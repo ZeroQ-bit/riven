@@ -29,4 +29,20 @@ def _ensure_stub(name: str, attrs: dict | None = None) -> None:
 # only used by the fuse mount feature. Stub it (and the type aliases media_stream
 # references at class-definition time) so the import chain resolves without the
 # native libfuse3 dependency. On CI the real pyfuse3 is installed and wins.
-_ensure_stub("pyfuse3", {"FileHandleT": Any})
+_ensure_stub(
+    "pyfuse3",
+    {
+        "EntryAttributes": types.SimpleNamespace,
+        "FUSEError": RuntimeError,
+        "FileHandleT": int,
+        "FileInfo": types.SimpleNamespace,
+        "FileNameT": bytes,
+        "InodeT": int,
+        "ModeT": int,
+        "Operations": object,
+        "ROOT_INODE": 1,
+        "ReaddirToken": Any,
+        "RequestContext": Any,
+        "default_options": set(),
+    },
+)
