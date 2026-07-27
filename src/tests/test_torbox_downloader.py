@@ -490,7 +490,7 @@ class TestDeleteTorrent:
         dl.delete_torrent(998877)
 
         _, kwargs = session.post.call_args
-        assert kwargs["json"]["operation"] == "Delete"
+        assert kwargs["json"]["operation"] == "delete"
         assert kwargs["json"]["torrent_id"] == 998877
 
     def test_api_error_raises(self):

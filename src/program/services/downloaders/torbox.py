@@ -638,7 +638,7 @@ class TorBoxDownloader(DownloaderBase):
         response = self.api.session.post(
             "torrents/controltorrent",
             json={
-                "operation": "Delete",
+                "operation": "delete",
                 "torrent_id": int(torrent_id),
                 "all": False,
             },
