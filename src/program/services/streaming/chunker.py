@@ -1,9 +1,10 @@
-import cachetools
 from dataclasses import dataclass, field
 from functools import cached_property
+
+import cachetools
+import trio_util
 from kink import di
 from ordered_set import OrderedSet
-import trio_util
 
 
 class ChunkCacheNotifier:
@@ -184,22 +185,6 @@ class ChunkRange:
         if start >= self.footer_chunk.start:
             return OrderedSet([self.footer_chunk])
 
-        # The request spans content, so calculate the required chunks.
-        content_request_start = max(0, start - self.header_chunk.size)
-        content_request_end = min(
-            max(0, end - self.header_chunk.size),
-            self.footer_chunk.start - 1,
-        )
-
-        lower_chunk_index = min(
-            content_request_start // self.chunk_size,
-            self.max_chunks + 1,
-        )
-        upper_chunk_index = min(
-            content_request_end // self.chunk_size,
-            self.max_chunks + 1,
-        )
-
         chunks = OrderedSet[Chunk]([])
 
         # If the current request is within the header boundaries, include the header chunk.
@@ -207,21 +192,38 @@ class ChunkRange:
         if self.size and self.position < self.header_chunk.size:
             chunks.add(self.header_chunk)
 
-        for chunk_index in range(lower_chunk_index, upper_chunk_index + 1):
-            chunk_start = self.header_chunk.size + (chunk_index * self.chunk_size)
-            chunk_end = min(
-                chunk_start + self.chunk_size - 1,
-                self.footer_chunk.start - 1,
+        # Calculate only the part of the request that intersects the body. Keep
+        # the bounds absolute until converting them to chunk indexes; mixing an
+        # absolute footer offset with a relative request offset can create a
+        # chunk whose start is already inside the footer.
+        content_request_start = max(start, self.header_chunk.size)
+        content_request_end = min(end, self.footer_chunk.start - 1)
+
+        if content_request_start <= content_request_end:
+            lower_chunk_index = min(
+                (content_request_start - self.header_chunk.size) // self.chunk_size,
+                self.max_chunks + 1,
+            )
+            upper_chunk_index = min(
+                (content_request_end - self.header_chunk.size) // self.chunk_size,
+                self.max_chunks + 1,
             )
 
-            chunks.add(
-                Chunk(
-                    cache_key=self.cache_key,
-                    index=chunk_index + 1,
-                    start=chunk_start,
-                    end=chunk_end,
+            for chunk_index in range(lower_chunk_index, upper_chunk_index + 1):
+                chunk_start = self.header_chunk.size + (chunk_index * self.chunk_size)
+                chunk_end = min(
+                    chunk_start + self.chunk_size - 1,
+                    self.footer_chunk.start - 1,
                 )
-            )
+
+                chunks.add(
+                    Chunk(
+                        cache_key=self.cache_key,
+                        index=chunk_index + 1,
+                        start=chunk_start,
+                        end=chunk_end,
+                    )
+                )
 
         # If the request spans into the footer, include the footer chunk.
         if end >= self.footer_chunk.start:
