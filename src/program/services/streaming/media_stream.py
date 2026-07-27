@@ -15,7 +15,10 @@ from ordered_set import OrderedSet
 from program.settings import settings_manager
 from program.utils import benchmark
 from program.utils.async_client import AsyncClient
-from program.utils.debrid_link_status import should_refresh_download_url
+from program.utils.debrid_link_status import (
+    is_streamable_http_url,
+    should_refresh_download_url,
+)
 from program.utils.proxy_client import ProxyClient
 
 from .chunker import Chunk, ChunkCacheNotifier, Chunker, ChunkRange
@@ -1167,9 +1170,12 @@ class MediaStream:
         )
 
         if entry_info:
-            fresh_url = entry_info.url
+            # ``download_url`` may be an internal provider locator such as
+            # ``torbox:<torrent_id>:<file_id>``. Only the freshly unrestricted
+            # HTTP URL is safe to pass to HTTPX.
+            fresh_url = entry_info.unrestricted_url
 
-            if fresh_url and fresh_url != self.target_url.value:
+            if is_streamable_http_url(fresh_url) and fresh_url != self.target_url.value:
                 if self.enable_tracing:
                     logger.log(
                         "STREAM",

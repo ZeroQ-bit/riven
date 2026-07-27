@@ -4,18 +4,17 @@ from typing import TYPE_CHECKING, Literal, TypedDict
 
 from kink import di
 from loguru import logger
-
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from program.db.db import db_session
-from program.media.media_entry import MediaEntry
-from program.services.streaming.exceptions import (
-    DebridServiceLinkUnavailable,
-)
 from program.media.item import MediaItem
+from program.media.media_entry import MediaEntry
+from program.services.streaming.exceptions import DebridServiceLinkUnavailable
 from program.types import Event
-from routers.secure.items import apply_item_mutation
 from program.utils.debrid_cdn_url import DebridCDNUrl
+from program.utils.debrid_link_status import is_streamable_http_url
+from routers.secure.items import apply_item_mutation
 
 if TYPE_CHECKING:
     from program.services.downloaders import Downloader
@@ -130,12 +129,19 @@ class VFSDatabase:
             try:
                 new_unrestricted = service.unrestrict_link(entry.download_url)
 
-                if new_unrestricted:
+                if new_unrestricted and is_streamable_http_url(
+                    new_unrestricted.download
+                ):
                     entry.unrestricted_url = new_unrestricted.download
 
-                    cdn_url = DebridCDNUrl(entry)
+                    # A TorBox CDN URL is generated specifically for this read.
+                    # Avoid consuming it with a separate validation GET; the
+                    # streamer's single bounded retry is the validation.
+                    is_fresh_torbox_url = (entry.provider or "").lower() == "torbox"
 
-                    if cdn_url.validate(attempt_refresh=False):
+                    if is_fresh_torbox_url or DebridCDNUrl(entry).validate(
+                        attempt_refresh=False
+                    ):
                         session.merge(entry)
                         session.commit()
 

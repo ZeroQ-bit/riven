@@ -531,6 +531,37 @@ class TestUnrestrictLink:
         assert kwargs["params"]["torrent_id"] == 998877
         assert kwargs["params"]["file_id"] == 1
 
+    def test_accepts_live_string_response(self):
+        session = MagicMock()
+        session.get.return_value = make_response(
+            {
+                "success": True,
+                "detail": "",
+                "data": "https://store-071.wnam.tb-cdn.io/dld/fresh?token=test",
+            }
+        )
+        dl = make_downloader(session)
+
+        link = dl.unrestrict_link("torbox:998877:1")
+
+        assert link is not None
+        assert link.download == "https://store-071.wnam.tb-cdn.io/dld/fresh?token=test"
+        assert link.filename == "torbox-998877-1"
+        assert link.filesize == 0
+
+    def test_rejects_non_http_string_response(self):
+        session = MagicMock()
+        session.get.return_value = make_response(
+            {
+                "success": True,
+                "detail": "",
+                "data": "torbox:998877:1",
+            }
+        )
+        dl = make_downloader(session)
+
+        assert dl.unrestrict_link("torbox:998877:1") is None
+
     def test_returns_none_on_http_error(self):
         session = MagicMock()
         session.get.return_value = make_response(
