@@ -17,6 +17,7 @@ from program.services.downloaders.models import (
     UserInfo,
 )
 from program.settings import settings_manager
+from program.utils.debrid_link_status import is_streamable_http_url
 from program.utils.request import CircuitBreakerOpen, SmartResponse, SmartSession
 
 from .shared import DownloaderBase, premium_days_left
@@ -688,14 +689,26 @@ class TorBoxDownloader(DownloaderBase):
             if not envelope.success or not envelope.data:
                 return None
 
-            dl = TorBoxRequestDownload.model_validate(envelope.data)
+            # The live TorBox API returns ``data`` as the CDN URL string, while
+            # older responses and fixtures use an object containing ``url``.
+            # Accept both shapes and reject anything that is not a complete
+            # HTTP(S) URL before handing it to the streaming client.
+            if isinstance(envelope.data, str):
+                download_url = envelope.data
+                filename = f"torbox-{torrent_id}-{file_id}"
+                filesize = 0
+            else:
+                dl = TorBoxRequestDownload.model_validate(envelope.data)
+                download_url = dl.url
+                filename = dl.filename or f"torbox-{torrent_id}-{file_id}"
+                filesize = dl.filesize or 0
 
-            # Fetch filename/size from torrent info if the CDN response omitted them.
-            filename = dl.filename or f"torbox-{torrent_id}-{file_id}"
-            filesize = dl.filesize or 0
+            if not is_streamable_http_url(download_url):
+                logger.debug(f"TorBox requestdl returned an invalid URL for {link}")
+                return None
 
             return UnrestrictedLink(
-                download=dl.url,
+                download=download_url,
                 filename=filename,
                 filesize=filesize,
             )
