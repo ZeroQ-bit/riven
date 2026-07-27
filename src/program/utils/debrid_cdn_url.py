@@ -1,8 +1,8 @@
 from typing import Self
+
 import httpx
 from loguru import logger
 
-from http import HTTPStatus
 from kink import di
 
 from program.settings import settings_manager
@@ -10,6 +10,7 @@ from program.services.streaming.media_stream import PROXY_REQUIRED_PROVIDERS
 from program.services.streaming.exceptions import (
     DebridServiceLinkUnavailable,
 )
+from program.utils.debrid_link_status import should_refresh_download_url
 from program.media.media_entry import MediaEntry
 from program.db.db import db_session
 
@@ -88,10 +89,10 @@ class DebridCDNUrl:
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
 
-                if (
-                    status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.GONE)
-                    and attempt == 1
-                ):
+                if should_refresh_download_url(
+                    status_code,
+                    self.provider,
+                ) and attempt == 1:
                     # Only attempt to refresh the URL on the first failure
                     if attempt_refresh:
                         if url := self._refresh():

@@ -15,6 +15,7 @@ from ordered_set import OrderedSet
 from program.settings import settings_manager
 from program.utils import benchmark
 from program.utils.async_client import AsyncClient
+from program.utils.debrid_link_status import should_refresh_download_url
 from program.utils.proxy_client import ProxyClient
 
 from .chunker import Chunk, ChunkCacheNotifier, ChunkRange, Chunker
@@ -857,8 +858,10 @@ class MediaStream:
                         continue
 
                     raise DebridServiceForbiddenException(provider=self.provider) from e
-                elif status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.GONE, HTTPStatus.SERVICE_UNAVAILABLE):
-                    # File can't be found at this URL; try refreshing the URL once
+                elif should_refresh_download_url(status_code, self.provider):
+                    # TorBox returns HTTP 400 for some expired/invalid presigned
+                    # CDN links. Regenerate those links once just like other
+                    # providers' 404/410/503 responses, but never loop.
                     if attempt == 0:
                         has_fresh_url = await self._refresh_download_url()
 
