@@ -1,0 +1,24 @@
+{
+  "status": "success",
+  "message": "",
+  "transfers": [
+    {
+      "id": "tr_abcdef123456",
+      "name": "Some.Show.2026.S01.1080p",
+      "status": "finished",
+      "progress": 1.0,
+      "message": "",
+      "folder_id": "fld_show_001",
+      "file_id": null
+    },
+    {
+      "id": "tr_other_999",
+      "name": "Another.Movie.2025.720p",
+      "status": "running",
+      "progress": 0.3,
+      "message": "Downloading from server",
+      "folder_id": null,
+      "file_id": null
+    }
+  ]
+}

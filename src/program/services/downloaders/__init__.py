@@ -36,6 +36,7 @@ from .realdebrid import RealDebridDownloader
 from .debridlink import DebridLinkDownloader
 from .alldebrid import AllDebridDownloader
 from .torbox import TorBoxDownloader
+from .premiumize import PremiumizeDownloader
 
 
 class Downloader(Runner[None, DownloaderBase]):
@@ -48,6 +49,7 @@ class Downloader(Runner[None, DownloaderBase]):
             DebridLinkDownloader: DebridLinkDownloader(),
             AllDebridDownloader: AllDebridDownloader(),
             TorBoxDownloader: TorBoxDownloader(),
+            PremiumizeDownloader: PremiumizeDownloader(),
         }
 
         # Get all initialized services instead of just the first one

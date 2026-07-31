@@ -134,12 +134,16 @@ class VFSDatabase:
                 ):
                     entry.unrestricted_url = new_unrestricted.download
 
-                    # A TorBox CDN URL is generated specifically for this read.
-                    # Avoid consuming it with a separate validation GET; the
-                    # streamer's single bounded retry is the validation.
-                    is_fresh_torbox_url = (entry.provider or "").lower() == "torbox"
+                    # TorBox and Premiumize CDN URLs are generated specifically
+                    # for this read. Avoid consuming them with a separate
+                    # validation GET; the streamer's single bounded retry is
+                    # the validation.
+                    is_fresh_per_read_url = (entry.provider or "").lower() in {
+                        "torbox",
+                        "premiumize",
+                    }
 
-                    if is_fresh_torbox_url or DebridCDNUrl(entry).validate(
+                    if is_fresh_per_read_url or DebridCDNUrl(entry).validate(
                         attempt_refresh=False
                     ):
                         session.merge(entry)

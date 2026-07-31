@@ -1,0 +1,32 @@
+{
+  "status": "success",
+  "message": "",
+  "folder_id": "fld_show_001",
+  "name": "Some.Show.2026.S01.1080p",
+  "content": [
+    {
+      "id": "4f2a01",
+      "name": "Some.Show.2026.S01E01.1080p.mkv",
+      "type": "file",
+      "size": 1500000000,
+      "link": "https://www.premiumize.me/files?file_id=4f2a01&token=abc",
+      "created_at": 1700000000,
+      "mime_type": "video/x-matroska"
+    },
+    {
+      "id": "4f2a02",
+      "name": "Some.Show.2026.S01E02.1080p.mkv",
+      "type": "file",
+      "size": 1450000000,
+      "link": "https://www.premiumize.me/files?file_id=4f2a02&token=def",
+      "created_at": 1700000000,
+      "mime_type": "video/x-matroska"
+    },
+    {
+      "id": "sub_folder_xx",
+      "name": "Subtitles",
+      "type": "folder",
+      "created_at": 1700000000
+    }
+  ]
+}

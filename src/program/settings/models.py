@@ -75,6 +75,11 @@ class TorBoxModel(Observable):
     api_key: str = Field(default="", description="TorBox API key")
 
 
+class PremiumizeModel(Observable):
+    enabled: bool = Field(default=False, description="Enable Premiumize")
+    api_key: str = Field(default="", description="Premiumize API key")
+
+
 class DownloadersModel(Observable):
     video_extensions: list[str] = Field(
         default_factory=lambda: list[str](["mp4", "mkv", "avi"]),
@@ -114,6 +119,10 @@ class DownloadersModel(Observable):
     torbox: TorBoxModel = Field(
         default_factory=lambda: TorBoxModel(),
         description="TorBox downloader configuration",
+    )
+    premiumize: PremiumizeModel = Field(
+        default_factory=lambda: PremiumizeModel(),
+        description="Premiumize downloader configuration",
     )
 
 
