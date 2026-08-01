@@ -1,5 +1,7 @@
 """Comet scraper module"""
 
+import regex
+
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -8,6 +10,14 @@ from program.services.scrapers.base import ScraperService
 from program.settings import settings_manager
 from program.utils.request import SmartSession, get_hostname_from_url
 from program.settings.models import CometConfig
+
+# Matches every common HDR/Dolby Vision token in release titles. Comet's
+# /configure UI has no HDR-exclude control, so HDR streams are dropped here on
+# the Riven side before they are handed to the downloader.
+HDR_PATTERN = regex.compile(
+    r"\b(HDR(10\+|10)?|Dolby[ .-]?Vision|DOVI|DV\b|HDR10)\b",
+    regex.IGNORECASE,
+)
 
 
 class CometScrapeResponse(BaseModel):
@@ -118,11 +128,26 @@ class Comet(ScraperService[CometConfig]):
             logger.log("NOT_FOUND", f"No streams found for {item.log_string}")
             return {}
 
-        torrents = {
-            stream.info_hash: stream.description.split("\n")[0].replace("📄 ", "")
-            for stream in data.streams
-            if stream.info_hash
-        }
+        torrents = {}
+        hdr_excluded = 0
+
+        for stream in data.streams:
+            if not stream.info_hash:
+                continue
+
+            title = stream.description.split("\n")[0].replace("📄 ", "")
+
+            # Drop HDR / Dolby Vision releases (see HDR_PATTERN above).
+            if HDR_PATTERN.search(title):
+                hdr_excluded += 1
+                continue
+
+            torrents[stream.info_hash] = title
+
+        if hdr_excluded:
+            logger.debug(
+                f"Excluded {hdr_excluded} HDR/Dolby Vision stream(s) for {item.log_string}"
+            )
 
         if torrents:
             logger.log(
