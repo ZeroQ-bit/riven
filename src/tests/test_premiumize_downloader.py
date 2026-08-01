@@ -524,6 +524,68 @@ class TestUnrestrictLink:
         assert dl.unrestrict_link("premiumize:fld_show_001:4f2a01") is None
 
 
+class TestCleanupTransfers:
+    """Premiumize cloud-storage cleanup: old finished transfers are deleted so
+    the cloud storage quota doesn't fill up and block new downloads.
+    """
+
+    def _make_transfers(self, n, status="finished"):
+        return [{"id": f"t{i}", "status": status, "name": f"item {i}"} for i in range(n)]
+
+    def test_deletes_old_finished_beyond_keep_recent(self):
+        session = MagicMock()
+        # 60 finished transfers, keep_recent=50 -> 10 oldest deleted.
+        # transfer/list is newest-first, so deletions are the LAST 10.
+        session.get.return_value = make_response(
+            {"status": "success", "transfers": self._make_transfers(60)}
+        )
+        session.post.return_value = make_response({"status": "success"})
+        dl = make_downloader(session)
+
+        deleted = dl.cleanup_transfers(keep_recent=50)
+
+        assert deleted == 10
+        # delete_torrent posts to transfer/delete 10 times
+        assert session.post.call_count == 10
+
+    def test_keeps_all_when_under_threshold(self):
+        session = MagicMock()
+        session.get.return_value = make_response(
+            {"status": "success", "transfers": self._make_transfers(30)}
+        )
+        dl = make_downloader(session)
+
+        assert dl.cleanup_transfers(keep_recent=50) == 0
+        session.post.assert_not_called()
+
+    def test_never_deletes_active_transfers(self):
+        session = MagicMock()
+        transfers = self._make_transfers(60) + [
+            {"id": "active1", "status": "running", "name": "running"},
+            {"id": "active2", "status": "queued", "name": "queued"},
+        ]
+        session.get.return_value = make_response(
+            {"status": "success", "transfers": transfers}
+        )
+        session.post.return_value = make_response({"status": "success"})
+        dl = make_downloader(session)
+
+        deleted = dl.cleanup_transfers(keep_recent=50)
+        assert deleted == 10  # only finished beyond threshold
+        # none of the delete calls target the active transfers
+        for call in session.post.call_args_list:
+            assert call.kwargs["data"]["id"] not in ("active1", "active2")
+
+    def test_returns_zero_on_api_error(self):
+        session = MagicMock()
+        session.get.return_value = make_response(
+            {"status": "error"}, status_code=500
+        )
+        dl = make_downloader(session)
+        # _maybe_backoff raises CircuitBreakerOpen on 500; cleanup catches it
+        assert dl.cleanup_transfers() == 0
+
+
 class TestRouterSerialization:
     """Regression: /downloader_user_info builds DownloaderUserInfo(service=...).
 

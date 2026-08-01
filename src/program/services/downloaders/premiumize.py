@@ -608,6 +608,82 @@ class PremiumizeDownloader(DownloaderBase):
         if not response.ok:
             raise PremiumizeError(self._handle_error(response))
 
+    def cleanup_transfers(self, keep_recent: int = 50) -> int:
+        """
+        Periodically delete old finished transfers to free Premiumize cloud
+        storage. Premiumize (unlike Real-Debrid/TorBox) enforces a cloud
+        storage quota; without cleanup, finished transfers accumulate and
+        eventually trigger 'Your space is full' errors that block all new
+        downloads.
+
+        Keeps the ``keep_recent`` most-recent finished transfers (so files
+        currently being streamed via the VFS stay available) and deletes the
+        rest. Active (running/queued/seeding) transfers are never touched.
+
+        Returns:
+            The number of transfers deleted.
+        """
+        try:
+            assert self.api
+
+            response = self.api.session.get(
+                "transfer/list", params=self._authed_params()
+            )
+            self._maybe_backoff(response)
+
+            if not response.ok:
+                logger.debug(
+                    f"Premiumize cleanup: transfer/list failed: {self._handle_error(response)}"
+                )
+                return 0
+
+            try:
+                body = response.json()
+            except Exception:
+                return 0
+
+            if body.get("status") != "success":
+                return 0
+
+            transfers = body.get("transfers") or []
+            # Only finished transfers are candidates for cleanup; never delete
+            # active ones (running/queued/seeding).
+            finished = [
+                t for t in transfers
+                if isinstance(t, dict) and t.get("status") == "finished"
+            ]
+
+            if len(finished) <= keep_recent:
+                return 0
+
+            # transfer/list is newest-first per the Premiumize docs, so the
+            # oldest transfers to delete are at the end of the list.
+            to_delete = finished[keep_recent:]
+
+            deleted = 0
+            for t in to_delete:
+                tid = t.get("id")
+                if not tid:
+                    continue
+                try:
+                    self.delete_torrent(tid)
+                    deleted += 1
+                except Exception as e:
+                    logger.debug(f"Premiumize cleanup: failed to delete transfer {tid}: {e}")
+
+            if deleted:
+                logger.info(
+                    f"Premiumize cleanup: freed {deleted} old transfer(s) from cloud storage"
+                )
+
+            return deleted
+        except CircuitBreakerOpen:
+            logger.debug("Premiumize cleanup: circuit breaker OPEN, skipping")
+            return 0
+        except Exception as e:
+            logger.debug(f"Premiumize cleanup: failed: {e}")
+            return 0
+
     def unrestrict_link(self, link: str) -> UnrestrictedLink | None:
         """
         Resolve a Premiumize CDN download URL for a file.

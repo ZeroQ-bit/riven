@@ -69,6 +69,9 @@ class Downloader(Runner[None, DownloaderBase]):
         self.subtitles_enabled = (
             settings_manager.settings.post_processing.subtitle.enabled
         )
+        # Track last cloud-storage cleanup so we don't hit the Premiumize API
+        # on every download (providers that need it throttle to once per hour).
+        self._last_transfer_cleanup = datetime.min
 
     def validate(self):
         if not self.initialized_services:
@@ -89,9 +92,22 @@ class Downloader(Runner[None, DownloaderBase]):
     ) -> MediaItemGenerator:
         logger.debug(f"Starting download process for {item.log_string} ({item.id})")
 
+        # Periodically free debrid cloud storage. Some providers (Premiumize)
+        # enforce a cloud storage quota that, when full, blocks all new
+        # downloads with "Your space is full". Cleanup is throttled to once
+        # per hour and no-ops for providers without a cleanup_transfers method.
+        now = datetime.now()
+        if now - self._last_transfer_cleanup >= timedelta(hours=1):
+            self._last_transfer_cleanup = now
+            for service in self.initialized_services:
+                cleanup = getattr(service, "cleanup_transfers", None)
+                if callable(cleanup):
+                    try:
+                        cleanup()
+                    except Exception as e:
+                        logger.debug(f"Transfer cleanup failed for {service.key}: {e}")
 
         # Check if all services are in cooldown due to circuit breaker
-        now = datetime.now()
 
         available_services = [
             service
