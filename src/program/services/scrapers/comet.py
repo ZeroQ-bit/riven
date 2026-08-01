@@ -74,9 +74,10 @@ class Comet(ScraperService[CometConfig]):
 
         if "elfhosted" in self.settings.url.lower():
             logger.warning(
-                "Elfhosted Comet instance is no longer supported. Please use a different instance."
+                "Using an Elfhosted Comet instance. These are shared and may "
+                "rate-limit large libraries; consider a self-hosted Comet for "
+                "heavy use. Proceeding anyway."
             )
-            return False
 
         try:
             response = self.session.get("/manifest.json", timeout=self.timeout)
