@@ -534,28 +534,28 @@ class TestCleanupTransfers:
 
     def test_deletes_old_finished_beyond_keep_recent(self):
         session = MagicMock()
-        # 60 finished transfers, keep_recent=50 -> 10 oldest deleted.
-        # transfer/list is newest-first, so deletions are the LAST 10.
+        # 60 finished transfers, keep_recent=20 -> 40 oldest deleted.
+        # transfer/list is newest-first, so deletions are the LAST 40.
         session.get.return_value = make_response(
             {"status": "success", "transfers": self._make_transfers(60)}
         )
         session.post.return_value = make_response({"status": "success"})
         dl = make_downloader(session)
 
-        deleted = dl.cleanup_transfers(keep_recent=50)
+        deleted = dl.cleanup_transfers(keep_recent=20)
 
-        assert deleted == 10
-        # delete_torrent posts to transfer/delete 10 times
-        assert session.post.call_count == 10
+        assert deleted == 40
+        # delete_torrent posts to transfer/delete 40 times
+        assert session.post.call_count == 40
 
     def test_keeps_all_when_under_threshold(self):
         session = MagicMock()
         session.get.return_value = make_response(
-            {"status": "success", "transfers": self._make_transfers(30)}
+            {"status": "success", "transfers": self._make_transfers(15)}
         )
         dl = make_downloader(session)
 
-        assert dl.cleanup_transfers(keep_recent=50) == 0
+        assert dl.cleanup_transfers(keep_recent=20) == 0
         session.post.assert_not_called()
 
     def test_never_deletes_active_transfers(self):
@@ -570,8 +570,8 @@ class TestCleanupTransfers:
         session.post.return_value = make_response({"status": "success"})
         dl = make_downloader(session)
 
-        deleted = dl.cleanup_transfers(keep_recent=50)
-        assert deleted == 10  # only finished beyond threshold
+        deleted = dl.cleanup_transfers(keep_recent=20)
+        assert deleted == 40  # only finished beyond threshold
         # none of the delete calls target the active transfers
         for call in session.post.call_args_list:
             assert call.kwargs["data"]["id"] not in ("active1", "active2")

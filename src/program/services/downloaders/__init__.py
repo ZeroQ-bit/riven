@@ -97,7 +97,7 @@ class Downloader(Runner[None, DownloaderBase]):
         # downloads with "Your space is full". Cleanup is throttled to once
         # per hour and no-ops for providers without a cleanup_transfers method.
         now = datetime.now()
-        if now - self._last_transfer_cleanup >= timedelta(hours=1):
+        if now - self._last_transfer_cleanup >= timedelta(minutes=15):
             self._last_transfer_cleanup = now
             for service in self.initialized_services:
                 cleanup = getattr(service, "cleanup_transfers", None)

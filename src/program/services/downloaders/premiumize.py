@@ -282,7 +282,17 @@ class PremiumizeDownloader(DownloaderBase):
 
             raise
         except PremiumizeError as e:
-            logger.warning(f"Availability check failed [{infohash}]: {e}")
+            # Premiumize returns "Your space is full!" when the cloud storage
+            # quota is exhausted. Clean up old transfers immediately so the
+            # download can proceed on the next attempt.
+            if "space is full" in str(e).lower():
+                logger.info(
+                    "Premiumize cloud storage full during availability check; "
+                    "triggering immediate cleanup"
+                )
+                self.cleanup_transfers(keep_recent=10)
+            else:
+                logger.warning(f"Availability check failed [{infohash}]: {e}")
 
             if transfer_id:
                 try:
@@ -608,7 +618,7 @@ class PremiumizeDownloader(DownloaderBase):
         if not response.ok:
             raise PremiumizeError(self._handle_error(response))
 
-    def cleanup_transfers(self, keep_recent: int = 50) -> int:
+    def cleanup_transfers(self, keep_recent: int = 20) -> int:
         """
         Periodically delete old finished transfers to free Premiumize cloud
         storage. Premiumize (unlike Real-Debrid/TorBox) enforces a cloud
@@ -618,7 +628,8 @@ class PremiumizeDownloader(DownloaderBase):
 
         Keeps the ``keep_recent`` most-recent finished transfers (so files
         currently being streamed via the VFS stay available) and deletes the
-        rest. Active (running/queued/seeding) transfers are never touched.
+        rest, oldest first, until cloud usage drops below the safe threshold.
+        Active (running/queued/seeding) transfers are never touched.
 
         Returns:
             The number of transfers deleted.
